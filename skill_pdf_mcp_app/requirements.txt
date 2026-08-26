@@ -1,0 +1,4 @@
+fastmcp>=2.0.0
+uvicorn
+reportlab>=4.0.0
+databricks-sdk>=0.30.0

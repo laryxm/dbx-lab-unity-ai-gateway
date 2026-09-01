@@ -77,11 +77,24 @@
 # Identificador do MCP Service dentro de CATALOG.SCHEMA (definidos no Setup).
 MCP_SERVICE_ID = "mcp_ontology"
 
-# Serving endpoints dos modelos publicados no gateway que o agente utiliza.
+# Serving endpoints dos modelos publicados no gateway (camada de serving → CAN_QUERY).
 # Deixe a lista vazia se o agente usa apenas as tools do MCP.
 MODEL_ENDPOINTS = [
     # "poc-modelo-externo",
     # "databricks-claude-sonnet-4-5",
+]
+
+# Modelos servidos pela Databricks (pay-per-token / Foundation Model API). No Unity Catalog
+# aparecem como system.ai.<modelo>. O acesso governado é EXECUTE ON MODEL.
+FMAPI_MODELS = [
+    # "databricks-claude-sonnet-4-5",
+    # "databricks-gpt-5",
+]
+
+# Modelos externos (ex.: Azure AI Foundry / OpenAI) registrados como Model Service no Unity
+# Catalog (catalog.schema.service). O acesso governado é USE CATALOG + USE SCHEMA + EXECUTE ON SERVICE.
+MODEL_SERVICES = [
+    # "meu_catalog.meu_schema.foundry_gpt4o",
 ]
 
 # Grupo de consumidores a ser criado e usado em todos os grants.
@@ -256,22 +269,37 @@ for a in perms.get("privilege_assignments", []):
 
 # MAGIC %md
 # MAGIC ## 6. Conceder acesso aos modelos do AI Gateway (workspace)
-# MAGIC Um modelo registrado no AI Gateway é um **serving endpoint**. Para o agente invocar um modelo
-# MAGIC via gateway, o usuário (por meio do grupo) precisa de **`CAN_QUERY`** naquele endpoint. Escala de
-# MAGIC permissões de serving endpoint:
+# MAGIC Com o Unity AI Gateway, o acesso aos modelos é governado pelo **Unity Catalog** — os modelos são
+# MAGIC securables, não apenas serving endpoints. Há duas camadas, e o notebook cobre as duas:
 # MAGIC
-# MAGIC | Permissão | O que habilita | Para quem |
+# MAGIC **Camada de serving (`CAN_QUERY` no endpoint).** Todo modelo publicado é servido por um serving
+# MAGIC endpoint. `CAN_QUERY` habilita a invocação na camada de serving:
+# MAGIC
+# MAGIC | Permissão do endpoint | O que habilita | Para quem |
 # MAGIC |---|---|---|
-# MAGIC | `CAN_QUERY` | **invocar** o modelo (inferência) | consumidores do agente — é o que precisam |
-# MAGIC | `CAN_VIEW` | ver a configuração/metadados do endpoint | leitura, sem invocar |
-# MAGIC | `CAN_MANAGE` | editar/excluir o endpoint e suas permissões | administradores do gateway |
+# MAGIC | `CAN_QUERY` | invocar o modelo (inferência) | consumidores do agente |
+# MAGIC | `CAN_VIEW` | ver configuração/metadados | leitura, sem invocar |
+# MAGIC | `CAN_MANAGE` | editar/excluir o endpoint e permissões | administradores |
 # MAGIC
-# MAGIC Concedemos `CAN_QUERY` ao **grupo** em cada endpoint informado no widget `model_endpoints`. Assim, o
-# MAGIC mesmo grupo que invoca o MCP também invoca os modelos — um único ponto de gestão de acesso.
+# MAGIC **Camada de governança (Unity Catalog).** É onde o gateway centraliza o controle de acesso:
 # MAGIC
-# MAGIC > Governança complementar (opcional, configurada no próprio endpoint, não aqui): *rate limits* por
-# MAGIC > usuário, roteamento e fallback ficam no bloco `ai_gateway` do endpoint (notebook 3.1). Permissão de
-# MAGIC > invocação e limite de uso são coisas distintas — `CAN_QUERY` habilita, o rate limit modula.
+# MAGIC 1. **Modelos servidos pela Databricks (pay-per-token / Foundation Model API)** aparecem como
+# MAGIC    `system.ai.<modelo>`. O privilégio de invocação é `EXECUTE ON MODEL`:
+# MAGIC    `GRANT EXECUTE ON MODEL system.ai.<modelo> TO <grupo>`.
+# MAGIC 2. **Modelos externos (ex.: Azure AI Foundry, OpenAI)** são registrados como **Model Service** no
+# MAGIC    Unity Catalog (`catalog.schema.service`). A invocação exige `USE CATALOG` + `USE SCHEMA` no
+# MAGIC    container e `EXECUTE ON SERVICE`.
+# MAGIC
+# MAGIC As três listas de parâmetros correspondem a essas camadas: `MODEL_ENDPOINTS` (serving),
+# MAGIC `FMAPI_MODELS` (pay-per-token) e `MODEL_SERVICES` (externos). Preencha as que se aplicam.
+# MAGIC
+# MAGIC > Governança complementar (no próprio endpoint, notebook 3.1): *rate limits* por usuário, roteamento
+# MAGIC > e fallback. Permissão de invocação e limite de uso são distintos — o grant habilita, o rate limit modula.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### 6a. Serving endpoints — CAN_QUERY
 
 # COMMAND ----------
 
@@ -280,7 +308,7 @@ def _endpoint_id(name):
 
 
 if not MODEL_ENDPOINTS:
-    print("Nenhum serving endpoint informado no widget 'model_endpoints' — pule se o agente só usa tools do MCP.")
+    print("Nenhum serving endpoint informado — pule se o acesso for feito só pela camada de UC abaixo.")
 for ep in MODEL_ENDPOINTS:
     try:
         eid = _endpoint_id(ep)
@@ -298,13 +326,51 @@ for ep in MODEL_ENDPOINTS:
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### 6b. Modelos pay-per-token — EXECUTE ON MODEL (system.ai.*)
+
+# COMMAND ----------
+
+if not FMAPI_MODELS:
+    print("Nenhum modelo pay-per-token informado em FMAPI_MODELS.")
+for modelo in FMAPI_MODELS:
+    try:
+        spark.sql(f"GRANT EXECUTE ON MODEL system.ai.`{modelo}` TO `{GRUPO}`")
+        print(f"EXECUTE ON MODEL system.ai.{modelo} concedido a '{GRUPO}'")
+    except Exception as e:
+        print(f"Falha no modelo '{modelo}': {str(e)[:200]}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### 6c. Modelos externos (Model Service) — USE CATALOG/SCHEMA + EXECUTE ON SERVICE
+
+# COMMAND ----------
+
+if not MODEL_SERVICES:
+    print("Nenhum model service externo informado em MODEL_SERVICES.")
+for svc_fqn in MODEL_SERVICES:
+    try:
+        cat, sch, _ = svc_fqn.split(".")
+        spark.sql(f"GRANT USE CATALOG ON CATALOG `{cat}` TO `{GRUPO}`")
+        spark.sql(f"GRANT USE SCHEMA ON SCHEMA `{cat}`.`{sch}` TO `{GRUPO}`")
+        spark.sql(f"GRANT EXECUTE ON SERVICE `{cat}`.`{sch}`.`{svc_fqn.split('.')[2]}` TO `{GRUPO}`")
+        print(f"USE CATALOG/SCHEMA + EXECUTE ON SERVICE {svc_fqn} concedidos a '{GRUPO}'")
+    except ValueError:
+        print(f"Formato inválido em MODEL_SERVICES: '{svc_fqn}' — use catalog.schema.service.")
+    except Exception as e:
+        print(f"Falha no model service '{svc_fqn}': {str(e)[:200]}")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## 7. Referências para operação
 # MAGIC O fluxo de primeiro login está descrito na célula "Como funciona a autorização" no início do notebook.
 # MAGIC As pré-condições habilitadas uma única vez (não por usuário) são:
 # MAGIC
 # MAGIC 1. Grupo criado, com membros e atribuído ao workspace (seções 1 a 3).
 # MAGIC 2. `EXECUTE` do grupo no MCP Service (seção 5).
-# MAGIC 3. `CAN_QUERY` do grupo nos modelos do gateway (seção 6).
+# MAGIC 3. Acesso do grupo aos modelos (seção 6): `CAN_QUERY` no serving endpoint, `EXECUTE ON MODEL` nos
+# MAGIC    pay-per-token (`system.ai.*`) e `USE CATALOG`/`USE SCHEMA`/`EXECUTE ON SERVICE` nos externos.
 # MAGIC 4. Redirect do Databricks na allowlist do IdP (valor abaixo).
 # MAGIC
 # MAGIC A célula seguinte imprime o redirect a manter na allowlist e o endpoint do gateway para este serviço.

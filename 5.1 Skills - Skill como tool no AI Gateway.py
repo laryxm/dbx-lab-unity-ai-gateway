@@ -1,6 +1,12 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Pilar 5 — Skill como tool no Unity AI Gateway (consumível por agente externo + Playground)
+# MAGIC # 5.1 Skills — Skill que EXECUTA código, exposta como tool no gateway
+# MAGIC
+# MAGIC > **Pilar 5 tem dois notebooks complementares.** Este (5.1) trata de skills que **executam código**
+# MAGIC > (gerar PDF, rodar uma análise via `ai_query`), expostas como **tool** via App MCP ou UC Function. O
+# MAGIC > notebook **5.2** trata de skills que **instruem** o agente (`SKILL.md` + arquivos de referência),
+# MAGIC > governadas nativamente como **UC Skills** (securable do Unity Catalog). Regra: se a skill precisa
+# MAGIC > rodar algo, use 5.1; se ela orienta com instruções e referências, use 5.2.
 # MAGIC
 # MAGIC ## Skill do Genie Code x tool do AI Gateway
 # MAGIC Uma skill do Genie Code e uma tool do AI Gateway são mecanismos diferentes:

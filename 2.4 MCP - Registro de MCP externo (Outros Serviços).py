@@ -196,7 +196,7 @@ else:
 # Exemplo genérico — DESCOMENTE e ajuste ao tool real listado acima:
 # res = gw("tools/call", {
 #     "name": "generate_powerpoint",   # <- confira o nome no tools/list
-#     "arguments": {"plain_text": "Visão geral de operação de mineração: 3 minas, produção de cobre e ouro", "length": 5},
+#     "arguments": {"plain_text": "Visão geral de vendas: catálogo de produtos, pedidos por região e alertas de estoque", "length": 5},
 # }, _id=3)
 # print(json.dumps(res, indent=2)[:2000])
 
@@ -204,7 +204,7 @@ else:
 
 # MAGIC %md
 # MAGIC ## 7. Testar no AI Playground
-# MAGIC - Catalog Explorer > `larissa_xm.mcps` > `slidespeak_mcp` > **Try in Playground**.
+# MAGIC - Catalog Explorer > `{CATALOG}.{SCHEMA}` > `slidespeak_mcp` > **Try in Playground**.
 # MAGIC - Use um modelo **Claude** (evite Gemini — bug do `thought_signature` no tool-calling).
 # MAGIC - Peça: *"Gere uma apresentação de 5 slides sobre X"* (consome crédito SlideSpeak).
 # MAGIC

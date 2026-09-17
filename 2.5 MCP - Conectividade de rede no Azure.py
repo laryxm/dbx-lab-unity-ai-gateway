@@ -86,17 +86,17 @@
 # MAGIC **Criar o Private Link Service** apontando pro frontend do ILB (numa subnet dedicada ao PLS):
 # MAGIC ```bash
 # MAGIC az network private-link-service create \
-# MAGIC   --resource-group <RG_ERO> \
+# MAGIC   --resource-group <RG_CLIENTE> \
 # MAGIC   --name pls-slidespeak-mcp \
-# MAGIC   --vnet-name <VNET_ERO> \
+# MAGIC   --vnet-name <VNET_CLIENTE> \
 # MAGIC   --subnet <SUBNET_PLS> \
 # MAGIC   --lb-name <NOME_DO_ILB> \
 # MAGIC   --lb-frontend-ip-configs <FRONTEND_DO_ILB> \
 # MAGIC   --location <REGIAO> \
-# MAGIC   --fqdns mcp.interno.ero.com
+# MAGIC   --fqdns mcp.interno.exemplo.com
 # MAGIC
 # MAGIC # anotar o resource id do PLS (usado no passo B.3):
-# MAGIC # /subscriptions/<SUB>/resourceGroups/<RG_ERO>/providers/Microsoft.Network/privateLinkServices/pls-slidespeak-mcp
+# MAGIC # /subscriptions/<SUB>/resourceGroups/<RG_CLIENTE>/providers/Microsoft.Network/privateLinkServices/pls-slidespeak-mcp
 # MAGIC ```
 
 # COMMAND ----------
@@ -106,7 +106,7 @@
 # MAGIC ```bash
 # MAGIC # criar um NCC na região do workspace
 # MAGIC databricks account network-connectivity create-network-connectivity-configuration \
-# MAGIC   --json '{"name":"ncc-ero-mcp","region":"<REGIAO_WORKSPACE>"}'
+# MAGIC   --json '{"name":"ncc-mcp","region":"<REGIAO_WORKSPACE>"}'
 # MAGIC
 # MAGIC # anotar o network_connectivity_config_id retornado (ex.: ncc-abc123)
 # MAGIC # listar, se já existir:
@@ -122,8 +122,8 @@
 # MAGIC ```bash
 # MAGIC cat > pe-rule.json <<'JSON'
 # MAGIC {
-# MAGIC   "resource_id": "/subscriptions/<SUB>/resourceGroups/<RG_ERO>/providers/Microsoft.Network/privateLinkServices/pls-slidespeak-mcp",
-# MAGIC   "domain_names": ["mcp.interno.ero.com"]
+# MAGIC   "resource_id": "/subscriptions/<SUB>/resourceGroups/<RG_CLIENTE>/providers/Microsoft.Network/privateLinkServices/pls-slidespeak-mcp",
+# MAGIC   "domain_names": ["mcp.interno.exemplo.com"]
 # MAGIC }
 # MAGIC JSON
 # MAGIC
@@ -134,8 +134,8 @@
 # MAGIC ```hcl
 # MAGIC resource "databricks_mws_ncc_private_endpoint_rule" "mcp" {
 # MAGIC   network_connectivity_config_id = "<NCC_ID>"
-# MAGIC   resource_id  = "/subscriptions/<SUB>/resourceGroups/<RG_ERO>/providers/Microsoft.Network/privateLinkServices/pls-slidespeak-mcp"
-# MAGIC   domain_names = ["mcp.interno.ero.com"]
+# MAGIC   resource_id  = "/subscriptions/<SUB>/resourceGroups/<RG_CLIENTE>/providers/Microsoft.Network/privateLinkServices/pls-slidespeak-mcp"
+# MAGIC   domain_names = ["mcp.interno.exemplo.com"]
 # MAGIC }
 # MAGIC ```
 
@@ -143,16 +143,16 @@
 
 # MAGIC %md
 # MAGIC ## B.4 — Aprovar o private endpoint (lado Azure, dono do PLS)
-# MAGIC O Databricks cria um Private Endpoint na subscription dele apontando pro PLS da Ero. O dono do
+# MAGIC O Databricks cria um Private Endpoint na subscription dele apontando pro PLS do cliente. O dono do
 # MAGIC PLS **precisa aprovar** — a regra fica PENDING até isso (e expira se não aprovada na janela).
 # MAGIC ```bash
 # MAGIC # listar conexões pendentes no PLS
 # MAGIC az network private-link-service connection list \
-# MAGIC   --resource-group <RG_ERO> --name pls-slidespeak-mcp -o table
+# MAGIC   --resource-group <RG_CLIENTE> --name pls-slidespeak-mcp -o table
 # MAGIC
 # MAGIC # aprovar
 # MAGIC az network private-endpoint-connection approve \
-# MAGIC   --resource-group <RG_ERO> \
+# MAGIC   --resource-group <RG_CLIENTE> \
 # MAGIC   --name <NOME_DA_CONEXAO_PENDENTE> \
 # MAGIC   --resource-name pls-slidespeak-mcp \
 # MAGIC   --type Microsoft.Network/privateLinkServices \
@@ -167,7 +167,7 @@
 
 # MAGIC %md
 # MAGIC ## B.5 — DNS privado (crítico — sem isso falha mesmo aprovado)
-# MAGIC O serverless do Databricks precisa resolver `mcp.interno.ero.com` para o IP privado do endpoint.
+# MAGIC O serverless do Databricks precisa resolver `mcp.interno.exemplo.com` para o IP privado do endpoint.
 # MAGIC - Criar/uso de uma **Private DNS Zone** com um registro A do FQDN → IP privado do private endpoint.
 # MAGIC - Vincular a zona à(s) VNet(s) relevante(s).
 # MAGIC - O `domain_names` da regra (B.3) DEVE bater com o FQDN que a connection HTTP usará como `host`.
@@ -211,7 +211,7 @@
 # MAGIC databricks account network-connectivity get-network-connectivity-configuration <NCC_ID>
 # MAGIC ```
 # MAGIC
-# MAGIC ## C.2 — Liberar no firewall/NSG da Ero
+# MAGIC ## C.2 — Liberar no firewall/NSG do cliente
 # MAGIC - Adicionar os IPs de egress do serverless (do passo C.1) como **allow** na regra de entrada do
 # MAGIC   endpoint MCP (NSG do ACI/AKS, ou Azure Firewall / App Gateway WAF na frente).
 # MAGIC - Restringir a porta (443) e, de preferência, exigir a API key (Bearer) no próprio MCP.
@@ -230,12 +230,12 @@
 # MAGIC
 # MAGIC Se a chamada ao MCP for executada por **compute clássico com VNet injection** (não serverless),
 # MAGIC o egress sai da **VNet do workspace** e vale conectividade de VNet padrão:
-# MAGIC - **VNet peering** entre a VNet do workspace e a VNet do ACI/AKS da Ero, ou
+# MAGIC - **VNet peering** entre a VNet do workspace e a VNet do ACI/AKS do cliente, ou
 # MAGIC - um **private endpoint / rota** alcançável a partir da subnet do workspace.
 # MAGIC - NSGs e private DNS na VNet do workspace resolvendo o FQDN do MCP.
 # MAGIC
 # MAGIC Menos comum para o Unity AI Gateway (que tende a rodar em serverless), mas aplicável se a
-# MAGIC arquitetura da Ero direcionar o tráfego por clusters clássicos.
+# MAGIC arquitetura do cliente direcionar o tráfego por clusters clássicos.
 
 # COMMAND ----------
 
@@ -244,8 +244,8 @@
 # MAGIC 1. Do serverless (um notebook simples), testar resolução + alcance do FQDN privado/público:
 # MAGIC    ```python
 # MAGIC    import socket, requests
-# MAGIC    print(socket.gethostbyname("mcp.interno.ero.com"))   # deve resolver p/ IP privado (Caminhos A/B)
-# MAGIC    r = requests.post("https://mcp.interno.ero.com/mcp",
+# MAGIC    print(socket.gethostbyname("mcp.interno.exemplo.com"))   # deve resolver p/ IP privado (Caminhos A/B)
+# MAGIC    r = requests.post("https://mcp.interno.exemplo.com/mcp",
 # MAGIC                      headers={"Authorization":"Bearer <API-KEY>",
 # MAGIC                               "Accept":"application/json, text/event-stream",
 # MAGIC                               "Content-Type":"application/json"},
@@ -257,7 +257,7 @@
 # MAGIC 2. Registrar a HTTP Connection com `host` = o FQDN configurado (ver `registrar_slidespeak_mcp`).
 # MAGIC 3. Rodar o `initialize`/`tools/list` pelo proxy do UC — se resolver e responder, a rota está ok.
 # MAGIC
-# MAGIC ## Itens de discovery a confirmar com o time de infra da Ero
+# MAGIC ## Itens de discovery a confirmar com o time de infra do cliente
 # MAGIC 1. O endpoint MCP será público (com firewall) ou privado na VNet?  → C vs A/B
 # MAGIC 2. Está no mesmo tenant/subscription do workspace Databricks? (cross-tenant adiciona aprovação de PE + DNS)
 # MAGIC 3. O AKS já tem Internal LB / o ACI está em-VNet? Existe subnet dedicada para o PLS?

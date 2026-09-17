@@ -125,7 +125,7 @@ for stmt in [
 # MAGIC execução. Como o token de usuário expira (~1h), se der erro de auth basta **rodar esta célula de
 # MAGIC novo** para renovar a connection.
 # MAGIC
-# MAGIC > U2M por usuário é adequado quando o MCP tem **IdP próprio** (ex.: Entra ID no MCP da Ero), não
+# MAGIC > U2M por usuário é adequado quando o MCP tem **IdP próprio** (ex.: Entra ID), não
 # MAGIC > para um App Databricks. Ver notebook `2.3`.
 
 # COMMAND ----------
@@ -188,8 +188,8 @@ print("initialize:", *gw_call("initialize", {"protocolVersion": "2025-11-25", "c
 print("\ntools/list:", *gw_call("tools/list", {}, _id=2))
 print("\ntools/call gerar_pdf:", *gw_call("tools/call", {
     "name": "gerar_pdf",
-    "arguments": {"titulo": "Relatório de Produção",
-                  "conteudo": "Produção diária por mina e alertas de equipamento.",
+    "arguments": {"titulo": "Relatório de Vendas",
+                  "conteudo": "Vendas por produto e região, com alertas de estoque.",
                   "template": "relatorio_operacional"},
 }, _id=3))
 
@@ -198,12 +198,12 @@ print("\ntools/call gerar_pdf:", *gw_call("tools/call", {
 # MAGIC %md
 # MAGIC ## A5. Testar no AI Playground
 # MAGIC 1. AI Playground → escolher um modelo (ex.: `databricks-claude-sonnet-4-6`).
-# MAGIC 2. Tools → Add tool → MCP → selecionar `larissa_xm.mcps.skill_pdf_mcp`.
+# MAGIC 2. Tools → Add tool → MCP → selecionar `{CATALOG}.{SCHEMA}.skill_pdf_mcp`.
 # MAGIC 3. Pedir em linguagem natural, ex.: "Gere um PDF de sumário executivo com o título 'Status Semanal'
-# MAGIC    resumindo a produção das minas."
+# MAGIC    resumindo as vendas do trimestre."
 # MAGIC 4. O modelo chama `gerar_pdf` e retorna o caminho do PDF no Volume.
 # MAGIC
-# MAGIC O PDF gerado fica em `/Volumes/larissa_xm/mcps/skill_artifacts/` (visível no Catalog Explorer).
+# MAGIC O PDF gerado fica em `/Volumes/{CATALOG}/{SCHEMA}/skill_artifacts/` (visível no Catalog Explorer).
 
 # COMMAND ----------
 
@@ -231,10 +231,10 @@ LLM_ENDPOINT = "databricks-claude-sonnet-4-5"   # Foundation Model disponível n
 spark.sql(f"""
 CREATE OR REPLACE FUNCTION {CATALOG}.{SCHEMA}.{FUNCTION_NAME}(pergunta STRING)
 RETURNS STRING
-COMMENT 'Analista inteligente de operação de mineração: interpreta a pergunta e devolve uma análise objetiva com recomendações acionáveis. Use para análises, diagnósticos e recomendações sobre produção, equipamentos e alertas.'
+COMMENT 'Analista inteligente de operação: interpreta a pergunta e devolve uma análise objetiva com recomendações acionáveis. Use para análises, diagnósticos e recomendações sobre produtos, pedidos e alertas.'
 RETURN ai_query(
   '{LLM_ENDPOINT}',
-  CONCAT('Você é um analista sênior de operações de mineração. Responda de forma objetiva, ',
+  CONCAT('Você é um analista sênior de operações. Responda de forma objetiva, ',
          'técnica e acionável, em português, em no máximo 6 linhas. Pergunta: ', pergunta)
 )
 """)
@@ -278,7 +278,7 @@ print("initialize:", *mmcp_call("initialize", {"protocolVersion": "2025-11-25", 
 print("\ntools/list:", *mmcp_call("tools/list", {}, _id=2))
 sc, resp = mmcp_call("tools/call", {
     "name": tool_name,
-    "arguments": {"pergunta": "A produção da MINA-NORTE caiu 15%. Quais hipóteses investigar?"},
+    "arguments": {"pergunta": "As vendas do produto SKU-1001 caíram 15%. Quais hipóteses investigar?"},
 }, _id=3)
 print("\ntools/call:", sc)
 rows = resp.get("result", {}).get("structuredContent", {}).get("rows")
@@ -289,8 +289,8 @@ print(rows[0][0] if rows else json.dumps(resp.get("error"), ensure_ascii=False))
 # MAGIC %md
 # MAGIC ## B4. Testar no AI Playground
 # MAGIC 1. AI Playground → escolher um modelo.
-# MAGIC 2. Tools → Add tool → Unity Catalog function → selecionar `larissa_xm.mcps.analisar_operacao`.
-# MAGIC 3. Pedir: "A perfuratriz PER-007 está com vibração acima do limite. O que fazer?"
+# MAGIC 2. Tools → Add tool → Unity Catalog function → selecionar `{CATALOG}.{SCHEMA}.{FUNCTION_NAME}`.
+# MAGIC 3. Pedir: "O pedido PED-5002 está com estoque baixo. O que fazer?"
 # MAGIC 4. O modelo chama a função (que por dentro consulta um LLM) e retorna a análise.
 
 # COMMAND ----------
@@ -300,9 +300,9 @@ print(rows[0][0] if rows else json.dumps(resp.get("error"), ensure_ascii=False))
 # MAGIC Um agente externo chama o mesmo endpoint, autenticando com OAuth M2M de um service principal que
 # MAGIC tenha permissão de execução:
 # MAGIC
-# MAGIC - **Opção A (App):** `POST {host}/ai-gateway/mcp-services/larissa_xm.mcps.skill_pdf_mcp`
+# MAGIC - **Opção A (App):** `POST {host}/ai-gateway/mcp-services/{CATALOG}.{SCHEMA}.skill_pdf_mcp`
 # MAGIC   — service principal com `EXECUTE` no MCP Service; resposta SSE.
-# MAGIC - **Opção B (UC Function):** `POST {host}/api/2.0/mcp/functions/larissa_xm/mcps`
+# MAGIC - **Opção B (UC Function):** `POST {host}/api/2.0/mcp/functions/{CATALOG}/{SCHEMA}`
 # MAGIC   — service principal com `EXECUTE` na função; resposta JSON.
 # MAGIC
 # MAGIC Cabeçalhos: `Authorization: Bearer <token M2M>` e `Accept: application/json, text/event-stream`;
@@ -322,8 +322,8 @@ print(rows[0][0] if rows else json.dumps(resp.get("error"), ensure_ascii=False))
 # MAGIC | Artefato de referência | Volume `skill_artifacts` | tabelas/volumes que a função consulta |
 # MAGIC
 # MAGIC ```sql
-# MAGIC -- GRANT EXECUTE ON MCP SERVICE larissa_xm.mcps.skill_pdf_mcp TO `grupo_agentes`;
-# MAGIC -- GRANT EXECUTE ON FUNCTION   larissa_xm.mcps.analisar_operacao TO `grupo_agentes`;
+# MAGIC -- GRANT EXECUTE ON MCP SERVICE {CATALOG}.{SCHEMA}.skill_pdf_mcp TO `grupo_agentes`;
+# MAGIC -- GRANT EXECUTE ON FUNCTION   {CATALOG}.{SCHEMA}.analisar_operacao TO `grupo_agentes`;
 # MAGIC ```
 
 # COMMAND ----------

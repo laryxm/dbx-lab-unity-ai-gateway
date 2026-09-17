@@ -16,7 +16,7 @@
 # MAGIC
 # MAGIC **Qual escolher, na prática:**
 # MAGIC - MCP hospedado em **Databricks App** → **M2M** (exemplo 2).
-# MAGIC - MCP próprio com **IdP corporativo** (ex.: ACI + Entra ID — o caso da Ero) → **U2M Per-User** (exemplo 4).
+# MAGIC - MCP próprio com **IdP corporativo** (ex.: ACI + Entra ID) → **U2M Per-User** (exemplo 4).
 # MAGIC - MCP **SaaS** cujo provedor suporta registro dinâmico (ex.: HuggingFace) → **DCR** (exemplo 5).
 
 # COMMAND ----------
@@ -125,7 +125,7 @@ print("U2M Shared -> preencha endpoints/client do provedor. O modo Shared é esc
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 4. OAuth U2M Per-User  ← o caso da Ero (MCP próprio + Entra ID)
+# MAGIC ## 4. OAuth U2M Per-User  ← MCP próprio protegido por IdP corporativo (ex.: Entra ID)
 # MAGIC **Cada usuário autoriza individualmente** e o Databricks guarda/renova o token **por usuário**,
 # MAGIC injetando o token do usuário correto a cada chamada. É o único modo que **propaga a identidade de
 # MAGIC quem invoca** (on-behalf-of, auditoria por usuário). Ideal quando o MCP é protegido por um IdP
@@ -191,6 +191,45 @@ print("DCR -> preencha os endpoints do provedor (que suporte DCR). Sem client_id
 # MAGIC funciona** — o redirect da connection não fica registrado nesse client (exigiria uma *custom OAuth
 # MAGIC app integration*, de nível de conta). Por isso, para um MCP em App, o caminho adequado é **M2M**
 # MAGIC (exemplo 2) com um service principal que tenha `CAN USE` no App. Ver notebooks 2.2 e 5.1.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 6. Governança da tool: permissão por UC + service policy
+# MAGIC A autenticação (acima) define **como o gateway se conecta** ao MCP. A **autorização** define **quem
+# MAGIC pode usar** a tool e **sob quais condições** — e isso é feito no Unity Catalog:
+# MAGIC
+# MAGIC 1. **`GRANT EXECUTE` no securable** (MCP Service ou UC Function) — só o principal com `EXECUTE`
+# MAGIC    (mais `USE CATALOG`/`USE SCHEMA`) consegue invocar a tool.
+# MAGIC 2. **Contextual service policy** — regra de `allow` / `deny` / `approval` que condiciona o uso da
+# MAGIC    tool (ex.: exigir aprovação para tools sensíveis, ou negar fora de um contexto). Confirme o nome
+# MAGIC    exato do securable/comando na doc vigente da POC — a superfície de service policy evolui.
+
+# COMMAND ----------
+
+# Permissão por principal no MCP Service (autorização base da tool).
+# spark.sql(f"GRANT EXECUTE ON MCP SERVICE {CATALOG}.{SCHEMA}.mcp_m2m TO `grupo_agentes`")
+print("GRANT EXECUTE ON MCP SERVICE", f"{CATALOG}.{SCHEMA}.<mcp_service>", "TO <principal>")
+
+# Contextual service policy (allow/deny/approval) — ver doc vigente para o comando exato.
+# Ex. conceitual: exigir aprovação para uma tool sensível antes de permitir a chamada.
+print("Service policy: aplicar allow/deny/approval sobre o securable (confirmar sintaxe na doc da POC).")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 7. Payload logging do MCP para auditoria
+# MAGIC Para auditoria de **o que** trafegou pela tool (não só quem/quando), habilite o **payload logging**
+# MAGIC no MCP Service. As chamadas passam a ser persistidas numa tabela governada — cruzável por
+# MAGIC `request_id` com o usage tracking do endpoint. Habilite no registro do MCP Service (ou via `PATCH`
+# MAGIC na API do serviço); confirme o campo exato na doc vigente.
+
+# COMMAND ----------
+
+# Ex. conceitual: habilitar payload logging no MCP Service (confirmar o campo na doc da POC).
+# rest("PATCH", f"/api/2.1/unity-catalog/mcp-services/{CATALOG}.{SCHEMA}.<mcp_service>",
+#      body={"payload_logging": {"enabled": True}})
+print("Payload logging: habilitar no MCP Service para persistir input/output em tabela governada.")
 
 # COMMAND ----------
 

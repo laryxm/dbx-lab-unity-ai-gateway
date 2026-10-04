@@ -1,3 +1,8 @@
 command:
   - "python"
   - "app.py"
+
+env:
+  # Volume UC onde o PDF é gravado: /Volumes/<CATALOG>/<SCHEMA>/skill_artifacts (o mesmo do 0.0 Setup).
+  - name: SKILL_VOLUME_DIR
+    value: "/Volumes/larissa_xm/mcps/skill_artifacts"

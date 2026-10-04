@@ -159,6 +159,20 @@ uma skill ser usada por um agente externo, ela é exposta como tool via MCP. Dua
   compartilhada.
 - Estilo dos notebooks: profissional e impessoal, valores de cliente sempre parametrizados.
 
+## Notas de uma execução na AWS (`fevm-field-toolbox`)
+
+- **Sem chave de provedor:** o provedor `databricks-model-serving` aponta um modelo "externo" para os
+  Foundation Models do próprio workspace (token de um service principal num secret), e o endpoint
+  ganha usage tracking, inference table, guardrails, rate limit, fallback e divisão de tráfego.
+- **CPF:** o detector de PII não marcou a frase com CPF (`pii_detection: false`); quem bloqueou foi o
+  guardrail de safety, na categoria `privacy`. O guardrail próprio do `4.1` continua necessário.
+- **`invalid_keywords`:** aceito na criação do endpoint, mas não volta na configuração.
+- **Rate limit:** 25 chamadas em sequência passaram; 30 em paralelo deram parte em `429`.
+- **`CREATE CONNECTION`:** sem esse privilégio no metastore, nenhum registro de MCP no gateway roda
+  (`2.2` e parte A do `5.1`); a parte B do `5.1` roda sem ele.
+- **SDK do serverless:** num ambiente antigo, `w.apps.get` não existe; atualize o ambiente ou o
+  `databricks-sdk`.
+
 ## Referências
 
 - Register an external MCP server — `docs.databricks.com/aws/en/ai-gateway/register-mcp-service`

@@ -15,6 +15,7 @@ Dados/branding 100% fictícios (empresa de mineração "Andes Metais").
 """
 import base64
 import io
+import os
 from datetime import datetime, timezone
 
 from fastmcp import FastMCP
@@ -42,7 +43,7 @@ _TEMPLATES = {
 }
 
 # Volume UC onde o PDF é persistido (governado). O SP do App precisa de WRITE VOLUME.
-_VOLUME_DIR = "/Volumes/larissa_xm/mcps/skill_artifacts"
+_VOLUME_DIR = os.getenv("SKILL_VOLUME_DIR", "/Volumes/larissa_xm/mcps/skill_artifacts")
 
 
 def _render_pdf(titulo: str, conteudo: str, template: str) -> bytes:

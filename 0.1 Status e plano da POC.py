@@ -10,6 +10,11 @@
 # MAGIC **Escopo:** Skills entrou como Pilar 5 (novo) e Guardrails (Pilar 4) é opcional — não é pré-requisito
 # MAGIC de sucesso, então fica fora do cálculo de conclusão. O percentual considera os itens dos pilares
 # MAGIC obrigatórios (1, 2, 3 e 5).
+# MAGIC
+# MAGIC > **Nota:** os notebooks já trazem o **material instruído** de todos os itens (inclusive spend cap +
+# MAGIC > LLM-as-judge no `1.1`, service policy + payload logging no `2.3`, fallback + traffic split no `3.1`).
+# MAGIC > Os itens marcados ○/» estão **prontos para executar/validar no workspace** — o percentual abaixo
+# MAGIC > reflete o que já foi **validado ao vivo**, não a disponibilidade de material.
 
 # COMMAND ----------
 

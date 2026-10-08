@@ -14,8 +14,8 @@
 # MAGIC próprio permite controlar autenticação e comportamento de ponta a ponta.
 # MAGIC
 # MAGIC ## O que este notebook produz
-# MAGIC Um Databricks App servindo Streamable HTTP em `/mcp` com tools de negócio sintéticas de operação
-# MAGIC de mineração (`producao_mina`, `listar_minas`, `status_equipamento`, `alertas_ativos`, `now`).
+# MAGIC Um Databricks App servindo Streamable HTTP em `/mcp` com tools de negócio sintéticas genéricas
+# MAGIC (`consultar_produto`, `listar_produtos`, `status_pedido`, `pedidos_com_alerta`, `now`).
 # MAGIC O deploy é feito via SDK a partir do próprio notebook (seções 6 a 9).
 
 # COMMAND ----------
@@ -51,51 +51,51 @@
 
 APP_PY = r'''
 """MCP server de demonstração para o Unity AI Gateway (Streamable HTTP em /mcp).
-Tools de negócio sintéticas de operação de mineração. Dados 100% fictícios."""
+Tools de negócio sintéticas genéricas. Dados 100% fictícios."""
 from datetime import datetime, timezone
 from fastmcp import FastMCP
 
-mcp = FastMCP(name="demo-mcp-larissa")
+mcp = FastMCP(name="demo-mcp")
 
-_MINAS = {
-    "MINA-NORTE": {"minerio": "cobre", "producao_ton_dia": 4200, "teor_pct": 1.85, "status": "operando"},
-    "MINA-SUL": {"minerio": "cobre", "producao_ton_dia": 3100, "teor_pct": 2.10, "status": "operando"},
-    "MINA-LESTE": {"minerio": "ouro", "producao_ton_dia": 180, "teor_pct": 0.04, "status": "manutencao"},
+_PRODUTOS = {
+    "SKU-1001": {"nome": "Teclado mecânico", "categoria": "perifericos", "estoque": 320, "status": "disponivel"},
+    "SKU-1002": {"nome": "Monitor 27\"", "categoria": "monitores", "estoque": 45, "status": "disponivel"},
+    "SKU-1003": {"nome": "Webcam 4K", "categoria": "perifericos", "estoque": 0, "status": "esgotado"},
 }
-_EQUIPAMENTOS = {
-    "CAM-114": {"tipo": "caminhao_fora_estrada", "mina": "MINA-NORTE", "saude": 0.92, "alerta": None},
-    "PER-007": {"tipo": "perfuratriz", "mina": "MINA-SUL", "saude": 0.61, "alerta": "vibracao_acima_do_limite"},
-    "MOI-003": {"tipo": "moinho_SAG", "mina": "MINA-NORTE", "saude": 0.48, "alerta": "temperatura_alta_no_mancal"},
+_PEDIDOS = {
+    "PED-5001": {"sku": "SKU-1001", "qtd": 12, "regiao": "sudeste", "status": "faturado", "alerta": None},
+    "PED-5002": {"sku": "SKU-1002", "qtd": 3, "regiao": "sul", "status": "em_separacao", "alerta": "estoque_baixo"},
+    "PED-5003": {"sku": "SKU-1003", "qtd": 5, "regiao": "nordeste", "status": "pendente", "alerta": "item_esgotado"},
 }
 
 
 @mcp.tool
-def producao_mina(mina_id: str) -> dict:
-    """Produção diária, minério, teor e status de uma mina. IDs: MINA-NORTE, MINA-SUL, MINA-LESTE."""
-    m = _MINAS.get(mina_id.upper())
-    return {"mina": mina_id.upper(), **m} if m else {"error": f"mina {mina_id} não encontrada"}
+def consultar_produto(sku: str) -> dict:
+    """Nome, categoria, estoque e status de um produto. SKUs: SKU-1001, SKU-1002, SKU-1003."""
+    p = _PRODUTOS.get(sku.upper())
+    return {"sku": sku.upper(), **p} if p else {"error": f"produto {sku} não encontrado"}
 
 
 @mcp.tool
-def listar_minas(minerio: str = "") -> list:
-    """Lista as minas operadas. Se `minerio` for informado, filtra por ele."""
-    return [{"mina": mid, **m} for mid, m in _MINAS.items()
-            if not minerio or m["minerio"].lower() == minerio.lower()]
+def listar_produtos(categoria: str = "") -> list:
+    """Lista os produtos do catálogo. Se `categoria` for informada, filtra por ela."""
+    return [{"sku": sku, **p} for sku, p in _PRODUTOS.items()
+            if not categoria or p["categoria"].lower() == categoria.lower()]
 
 
 @mcp.tool
-def status_equipamento(equipamento_id: str) -> dict:
-    """Saúde (0-1) e alertas de um equipamento. IDs: CAM-114, PER-007, MOI-003."""
-    e = _EQUIPAMENTOS.get(equipamento_id.upper())
-    return {"equipamento": equipamento_id.upper(), **e} if e else {"error": f"equipamento {equipamento_id} não encontrado"}
+def status_pedido(pedido_id: str) -> dict:
+    """SKU, quantidade, região, status e alertas de um pedido. IDs: PED-5001, PED-5002, PED-5003."""
+    o = _PEDIDOS.get(pedido_id.upper())
+    return {"pedido": pedido_id.upper(), **o} if o else {"error": f"pedido {pedido_id} não encontrado"}
 
 
 @mcp.tool
-def alertas_ativos(mina_id: str = "") -> list:
-    """Equipamentos com alerta ativo. Se `mina_id` for informado, filtra por mina."""
-    return [{"equipamento": eid, "mina": e["mina"], "saude": e["saude"], "alerta": e["alerta"]}
-            for eid, e in _EQUIPAMENTOS.items()
-            if e["alerta"] and (not mina_id or e["mina"] == mina_id.upper())]
+def pedidos_com_alerta(regiao: str = "") -> list:
+    """Pedidos com alerta ativo. Se `regiao` for informada, filtra por ela."""
+    return [{"pedido": pid, "regiao": o["regiao"], "status": o["status"], "alerta": o["alerta"]}
+            for pid, o in _PEDIDOS.items()
+            if o["alerta"] and (not regiao or o["regiao"] == regiao.lower())]
 
 
 @mcp.tool
@@ -168,7 +168,7 @@ from databricks.sdk.service.apps import App, AppDeployment
 w = WorkspaceClient()
 me = w.current_user.me().user_name
 
-dbutils.widgets.text("app_name", "demo-mcp-larissa", "Nome do App")
+dbutils.widgets.text("app_name", "demo-mcp", "Nome do App")
 APP_NAME = dbutils.widgets.get("app_name")
 
 # Nota: o deploy de apps exige o path absoluto COM prefixo /Workspace.

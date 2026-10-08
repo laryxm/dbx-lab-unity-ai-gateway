@@ -1,7 +1,7 @@
 """
 Skill "geração de PDF" empacotada como MCP server — para o Unity AI Gateway.
 
-Este é o ponto central do Pilar 5 da POC Ero: uma *skill* (no sentido Genie Code =
+Este é o ponto central do Pilar 5 da POC: uma *skill* (no sentido Genie Code =
 instruções + script + arquivo de referência) NÃO é consumível por um agente externo
 nem testável no Playground. O que o AI Gateway serve a um agente é uma *tool*. Então
 empacotamos a capacidade da skill como TOOLS de um MCP próprio (Streamable HTTP,
@@ -11,10 +11,11 @@ stateless), hospedado como Databricks App e registrado no Unity AI Gateway.
 - O "script" da skill      -> vira o corpo da tool (reportlab gerando o PDF).
 - O "arquivo de referência"-> vira o catálogo de templates (tool listar_templates).
 
-Dados/branding 100% fictícios (empresa de mineração "Andes Metais").
+Dados/branding 100% fictícios (empresa "Acme Corp").
 """
 import base64
 import io
+import os
 from datetime import datetime, timezone
 
 from fastmcp import FastMCP
@@ -27,22 +28,23 @@ _TEMPLATES = {
     "relatorio_operacional": {
         "titulo_padrao": "Relatório Operacional",
         "cor": (0.13, 0.29, 0.51),  # navy
-        "rodape": "Andes Metais — Uso interno",
+        "rodape": "Acme Corp — Uso interno",
     },
     "memorando": {
         "titulo_padrao": "Memorando",
         "cor": (0.20, 0.20, 0.20),
-        "rodape": "Andes Metais — Confidencial",
+        "rodape": "Acme Corp — Confidencial",
     },
     "sumario_executivo": {
         "titulo_padrao": "Sumário Executivo",
         "cor": (0.00, 0.44, 0.40),  # teal
-        "rodape": "Andes Metais — Diretoria",
+        "rodape": "Acme Corp — Diretoria",
     },
 }
 
 # Volume UC onde o PDF é persistido (governado). O SP do App precisa de WRITE VOLUME.
-_VOLUME_DIR = "/Volumes/larissa_xm/mcps/skill_artifacts"
+# Configurável via env var SKILL_VOLUME_DIR (defina no app.yaml). Ajuste o fallback ao seu catálogo/schema.
+_VOLUME_DIR = os.getenv("SKILL_VOLUME_DIR", "/Volumes/seu_catalogo/mcps/skill_artifacts")
 
 
 def _render_pdf(titulo: str, conteudo: str, template: str) -> bytes:

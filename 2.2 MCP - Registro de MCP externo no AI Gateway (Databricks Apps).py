@@ -30,8 +30,8 @@
 # MAGIC conceito confiável, o recomendado é um servidor MCP próprio, no qual se controla auth e comportamento.
 # MAGIC
 # MAGIC Este exemplo utiliza um MCP mínimo (FastMCP) hospedado como **Databricks App**, com tools de
-# MAGIC negócio sintéticas de operação de mineração. Código do app em `mcp_demo_app/`.
-# MAGIC Tools: `producao_mina`, `listar_minas`, `status_equipamento`, `alertas_ativos`, `now`.
+# MAGIC negócio sintéticas genéricas. Código do app em `mcp_demo_app/`.
+# MAGIC Tools: `consultar_produto`, `listar_produtos`, `status_pedido`, `pedidos_com_alerta`, `now`.
 # MAGIC
 # MAGIC > **Pontos de atenção do MCP em Databricks App** (ver seção final):
 # MAGIC > não usar `uvicorn app:app` (lifespan pendura → 502); usar `mcp.run(...)`. Health em `GET /`.
@@ -160,7 +160,7 @@ init_body = {
     "params": {
         "protocolVersion": "2025-11-25",
         "capabilities": {},
-        "clientInfo": {"name": "notebook-teste-larissa", "version": "1.0"},
+        "clientInfo": {"name": "notebook-teste", "version": "1.0"},
     },
 }
 
@@ -284,23 +284,23 @@ print(txt[:3000])
 
 # MAGIC %md
 # MAGIC ## 7. (Opcional) Chamar uma tool
-# MAGIC O App expõe `producao_mina`, `listar_minas`, `status_equipamento`, `alertas_ativos`, `now`.
+# MAGIC O App expõe `consultar_produto`, `listar_produtos`, `status_pedido`, `pedidos_com_alerta`, `now`.
 # MAGIC Ajuste `name` e `arguments` conforme o que apareceu no `tools/list` acima.
 
 # COMMAND ----------
 
 sc, txt = gw_call("tools/call", {
-    "name": "producao_mina",
-    "arguments": {"mina_id": "MINA-NORTE"},
+    "name": "consultar_produto",
+    "arguments": {"sku": "SKU-1001"},
 }, _id=3)
-print("producao_mina('MINA-NORTE'):", sc)
+print("consultar_produto('SKU-1001'):", sc)
 print(txt[:800], "\n")
 
 sc, txt = gw_call("tools/call", {
-    "name": "alertas_ativos",
+    "name": "pedidos_com_alerta",
     "arguments": {},
 }, _id=4)
-print("alertas_ativos():", sc)
+print("pedidos_com_alerta():", sc)
 print(txt[:800])
 
 # COMMAND ----------
@@ -360,7 +360,7 @@ for t in tools:
     print(f"  - {t['name']}: {t['description'][:70]}")
 
 # 2) chamar uma tool
-result = mcp_call_tool("producao_mina", {"mina_id": "MINA-NORTE"})
+result = mcp_call_tool("consultar_produto", {"sku": "SKU-1001"})
 print("\nResultado:")
 print(result["content"])
 
@@ -395,8 +395,8 @@ oai = w.serving_endpoints.get_open_ai_client()
 LLM = "databricks-claude-opus-4-8"  # ajuste pro endpoint disponível no workspace
 
 messages = [
-    {"role": "system", "content": "Você é um assistente de operações de mineração. Use as ferramentas disponíveis para responder sobre minas e equipamentos."},
-    {"role": "user", "content": "Quais equipamentos precisam de atenção e qual a produção da MINA-NORTE?"},
+    {"role": "system", "content": "Você é um assistente de operações. Use as ferramentas disponíveis para responder sobre produtos e pedidos."},
+    {"role": "user", "content": "Quais pedidos precisam de atenção e qual o estoque do produto SKU-1001?"},
 ]
 
 # turno 1: o modelo decide chamar uma tool

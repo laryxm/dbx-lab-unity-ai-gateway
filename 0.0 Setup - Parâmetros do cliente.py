@@ -21,10 +21,10 @@
 # COMMAND ----------
 
 # ============================ EDITE AQUI ============================
-CATALOG      = "larissa_xm"      # catálogo onde os objetos da POC vivem
+CATALOG      = "seu_catalogo"    # catálogo onde os objetos da POC vivem
 SCHEMA       = "mcps"            # schema para MCP Services e UC Functions
 APP_NAME     = "skill-pdf-mcp"   # Databricks App que hospeda um MCP próprio (Pilares 2 e 5)
-CONN_PREFIX  = "lxm_"            # prefixo das HTTP Connections (a namespace é metastore-level, compartilhada)
+CONN_PREFIX  = "poc_"            # prefixo das HTTP Connections (a namespace é metastore-level, compartilhada)
 SECRET_SCOPE = "mcp_poc"         # scope de secrets para tokens/API keys
 # ===================================================================
 

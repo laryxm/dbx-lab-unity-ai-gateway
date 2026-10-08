@@ -5,9 +5,12 @@ Prova de conceito de governança de modelos, MCP, roteamento, guardrails e skill
 todos compartilham um único ponto de configuração (`0.0 Setup`), de modo que os valores de cliente
 (catálogo, schema, nome do App, prefixos, secrets) vivam em um só lugar.
 
-O material foi construído e validado ao vivo em um workspace de laboratório. Os valores de cliente
-são sempre parametrizados (widgets / setup / secrets) — nenhum token ou chave aparece em texto plano
-no código.
+A POC é **genérica e reproduzível por qualquer cliente**: os exemplos usam dados 100% sintéticos e
+empresa fictícia, e todos os valores de ambiente são parametrizados (widgets / setup / secrets) —
+nenhum token, chave ou nome de cliente aparece em texto plano no código.
+
+O notebook **`0.2 Framework de POC`** enquadra tudo: critérios de sucesso por pilar, checklist de
+execução e arquitetura. O **`0.1 Status e plano`** acompanha o percentual de conclusão no dia a dia.
 
 ---
 
@@ -52,6 +55,8 @@ helpers `rest()`, `parse_sse()`, `mcp_call()`, `gateway_mcp_url()`, `managed_fun
 | Notebook | Pilar | O que faz |
 |---|---|---|
 | `0.0 Setup - Parâmetros do cliente` | — | Configuração central. Único lugar com valores de cliente + helpers derivados. |
+| `0.1 Status e plano da POC` | — | Painel de acompanhamento: percentual de conclusão e pendências por pilar. |
+| `0.2 Framework de POC` | — | Critérios de sucesso por pilar, checklist de execução e arquitetura. |
 | `1.1 Observabilidade - Registro de modelos e rastreamento` | 1 | Registra modelo externo e Foundation Model sob a mesma governança; liga usage tracking + inference tables; mostra como consultar uso, custo e logs. |
 | `2.1 MCP - Registro de MCP em Databricks Apps` | 2 | Constrói e hospeda um MCP server próprio (FastMCP, Streamable HTTP) como Databricks App. |
 | `2.2 MCP - Registro de MCP externo no AI Gateway (Databricks Apps)` | 2 | Registro ponta a ponta de um MCP externo: HTTP Connection + MCP Service + invocação via gateway. |
@@ -59,13 +64,32 @@ helpers `rest()`, `parse_sse()`, `mcp_call()`, `gateway_mcp_url()`, `managed_fun
 | `2.4 MCP - Registro de MCP externo (Outros Serviços)` | 2 | Registro de um MCP SaaS (SlideSpeak), nos modos hosted e self-host (ACI). |
 | `2.5 MCP - Conectividade de rede no Azure` | 2 | Caminhos de rede Databricks ↔ MCP em ACI/AKS (NCC + Private Link Service, private endpoint nativo, IP allowlist, VNet). |
 | `3.1 Gateway - Roteamento de modelos e controles` | 3 | Endpoint multi-modelo com traffic split, rate limit por identidade e fallback. |
-| `4.1 Guardrails - Configuração, teste e PII brasileira` | 4 | Inspeciona/testa guardrails (PII, safety, keywords, tópicos) e entrega um guardrail próprio para CPF. |
+| `4.1 Guardrails - Configuração, teste e PII fora da lista nativa` | 4 | Inspeciona/testa guardrails (PII, safety, keywords, tópicos) e entrega um guardrail próprio para PII fora da lista nativa (exemplo: CPF). |
 | `5.1 Skills - Skill como tool no AI Gateway` | 5 | Expõe uma skill como tool via MCP — Parte A (App para PDF) e Parte B (UC Function inteligente com `ai_query`). |
+| `5.2 Skills - UC Skills governadas (Beta)` | 5 | Publica uma skill que INSTRUI como UC Skill governada no Unity Catalog, com acesso por `GRANT` e versionamento. |
 
 Pastas de apoio:
 
-- `mcp_demo_app/` — código do MCP server de demonstração (tools sintéticas de operação de mineração).
+- `mcp_demo_app/` — código do MCP server de demonstração (tools de negócio sintéticas genéricas).
 - `skill_pdf_mcp_app/` — código do MCP server que expõe a skill de geração de PDF.
+
+## Por onde começar (por objetivo)
+
+- **Quero entender o escopo e os critérios da POC** → `0.2 Framework de POC`.
+- **Quero governar consumo e custo** → `1.1 Observabilidade`.
+- **Quero registrar/governar tools (MCP)** → `2.1` (MCP próprio) e `2.2` (MCP externo).
+- **Quero rotear entre modelos e impor limites** → `3.1 Roteamento`.
+- **Quero filtrar PII e conteúdo inseguro** → `4.1 Guardrails`.
+- **Quero expor capacidades como tools/skills** → `5.1` e `5.2`.
+
+## Glossário
+
+- **AI Gateway** — camada de governança sobre um serving endpoint (roteamento, limites, guardrails, tracking).
+- **MCP (Model Context Protocol)** — protocolo que expõe *tools* a agentes; aqui via Streamable HTTP.
+- **HTTP Connection** — securable do UC que guarda o endpoint do MCP + a credencial (o gateway roda um proxy na frente).
+- **MCP Service** — objeto do UC que referencia a connection e vira a *tool* chamável por agentes/Playground.
+- **Guardrail** — regra de inspeção de input/output (PII, safety, keywords, tópicos) com `BLOCK`/`MASK`/`NONE`.
+- **UC Skill** — skill que INSTRUI, publicada e governada no Unity Catalog (acesso por `GRANT`).
 
 ---
 
@@ -134,9 +158,10 @@ configuráveis no endpoint: `pii` (`BLOCK` / `MASK` / `NONE`), `safety`, `invali
 `valid_topics`. `BLOCK` retorna HTTP 400; `MASK` retorna 200 com conteúdo redigido.
 
 O detector de PII nativo reconhece categorias por formato e jurisdição (e-mail, cartão, telefone,
-IBAN, `us_ssn`, `uk_nhs`, `in_pan`…). **Identificadores brasileiros (CPF, RG) não constam da lista
-documentada** — o notebook verifica isso empiricamente no endpoint e entrega um **guardrail próprio
-para CPF**, com validação dos dois dígitos verificadores (módulo 11), a ser aplicado na borda do agente.
+IBAN, `us_ssn`, `uk_nhs`, `in_pan`…). Identificadores regionais fora dessa lista precisam de um
+reconhecedor próprio — o notebook verifica isso empiricamente no endpoint e entrega um **guardrail
+próprio para PII fora da lista nativa**, usando o **CPF** como exemplo concreto (validação dos dois
+dígitos verificadores, módulo 11), a ser aplicado na borda do agente.
 
 ## Pilar 5 — Skill como tool
 

@@ -200,9 +200,81 @@ print("Tag de projeto pronta para aplicar em:", EP)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Passo 7 — Hard spend cap + alerta por grupo
+# MAGIC Uso e custo só viram governança quando há um **limite** e alguém é **avisado** ao se aproximar dele.
+# MAGIC Duas camadas complementares:
+# MAGIC
+# MAGIC 1. **Rate limit no bloco `ai_gateway`** — teto de requisições/tokens por `user` ou por `endpoint`
+# MAGIC    (barreira em tempo real; detalhado no notebook `3.1`).
+# MAGIC 2. **Alerta de gasto sobre a system table** — uma **SQL Alert** agenda uma query de custo por grupo
+# MAGIC    e dispara notificação (e-mail/webhook) quando o gasto do período cruza o limiar.
+# MAGIC
+# MAGIC > O "hard cap" de gasto por si só não existe como um único botão no endpoint — a prática é rate limit
+# MAGIC > (contém o volume) + alerta de gasto (avisa antes de estourar o orçamento). Em `3.1` aplicamos o rate
+# MAGIC > limit; aqui montamos a query que a Alert monitora.
+
+# COMMAND ----------
+
+# Query de gasto por período que uma SQL Alert pode monitorar (ajuste o schema disponível).
+# A Alert é criada na UI (SQL → Alerts) ou via API sobre esta query, com condição > limiar e destinatários.
+query_gasto = f"""
+SELECT
+  date_trunc('day', usage_start_time) AS dia,
+  SUM(usage_quantity) AS unidades,
+  SUM(usage_quantity) * 1.0 AS custo_estimado   -- multiplique pelo preço da lista/negociado
+FROM system.billing.usage
+WHERE usage_metadata.endpoint_name = '{EP}'
+  AND usage_start_time >= current_date() - INTERVAL 30 DAYS
+GROUP BY 1 ORDER BY 1 DESC
+"""
+print("Query base da SQL Alert de gasto (crie a Alert sobre ela, com limiar + destinatários):")
+print(query_gasto)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Passo 8 — Agente rastreado ponta a ponta com LLM-as-judge
+# MAGIC Observabilidade de *plataforma* (usage/inference tables) responde "quanto/quando". Observabilidade de
+# MAGIC *qualidade* responde "quão bom" — e é o MLflow Tracing + um scorer LLM-as-judge que fecham isso.
+# MAGIC O agente (modelo servido pelo gateway + tools MCP) é instrumentado com `mlflow` e avaliado sobre os
+# MAGIC próprios traces.
+
+# COMMAND ----------
+
+# Esqueleto: instrumentar a chamada ao endpoint com MLflow Tracing e pontuar com um judge.
+# Requer: mlflow>=3, e um endpoint de chat servido pelo gateway (LLM_ENDPOINT).
+try:
+    import mlflow
+    from openai import OpenAI  # o cliente do FMAPI é compatível com a interface OpenAI
+
+    mlflow.openai.autolog()  # cada chamada de chat vira um trace automaticamente
+
+    LLM_ENDPOINT = EP  # ou outro endpoint de chat servido pelo gateway
+    client = w.serving_endpoints.get_open_ai_client()
+
+    with mlflow.start_run(run_name="poc-agente-observabilidade"):
+        resp = client.chat.completions.create(
+            model=LLM_ENDPOINT,
+            messages=[{"role": "user", "content": "Resuma em uma linha o papel do AI Gateway."}],
+            max_tokens=60,
+        )
+        saida = resp.choices[0].message.content
+        print("Resposta:", saida)
+
+    # LLM-as-judge sobre a saída (scorer de qualidade). Em MLflow 3, use mlflow.genai.evaluate
+    # com um scorer de Guidelines/Correctness; aqui a versão mínima com um judge por prompt.
+    print("\nInstrumente a avaliação com mlflow.genai.evaluate() + scorer Guidelines para pontuar os traces.")
+except Exception as e:
+    print("Ajuste o ambiente (mlflow>=3, endpoint de chat). Detalhe:", str(e)[:160])
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Checklist do pilar coberto aqui
 # MAGIC - Registro de modelo externo → Passo 1
 # MAGIC - Registro de modelo servido pela Databricks → Passo 2 (mesmo bloco `ai_gateway`)
 # MAGIC - Usage tracking e spend → Passos 1/2 e 4
 # MAGIC - Inference tables → Passos 1/2 e 5
 # MAGIC - Tag de governança → Passo 6
+# MAGIC - Hard spend cap + alerta por grupo → Passo 7 (+ rate limit no `3.1`)
+# MAGIC - Agente rastreado ponta a ponta com LLM-as-judge → Passo 8
